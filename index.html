@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SnapTune — Hear It, Feel It, Snap It</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --ink:#141018;
@@ -231,6 +232,18 @@
     font-weight:600;
   }
   .btn-ghost:hover{ border-color: var(--volt); }
+  .btn-ghost:disabled{ opacity:.5; cursor:not-allowed; }
+  .btn-drive{
+    border-color: var(--grape);
+  }
+  .btn-drive:hover{ border-color: var(--grape); background: rgba(124,92,255,0.12); }
+  .drive-status{
+    margin-top:12px;
+    font-size:13px;
+    color: rgba(251,246,233,0.75);
+    word-break: break-all;
+  }
+  .drive-status a{ color: var(--volt); }
 
   audio#track{ display:none; }
 
@@ -246,19 +259,30 @@
 <div class="wrap">
 
   <header class="hero">
-    <span class="eyebrow">Audio During Video</span>
+    <span class="eyebrow">audio reaction cam</span>
     <h1 class="display">Snap<span>Tune</span></h1>
     <p class="sub">Pick a track. Watch yourself hear it. Keep the clip or toss it — your call.</p>
   </header>
 
   <section class="disclaimer">
-    <h2>⚠️ This page uses your camera to record the video </h2>
+    <h2>⚠️ This page uses your camera</h2>
+    <p>
+      SnapTune turns on your device camera and microphone to record a short reaction
+      clip of you while a track plays. You'll always see your own live video feed on
+      screen so you know exactly when it's active.
+    </p>
+    <ul>
+      <li>Nothing is uploaded automatically — every clip is generated in your browser only.</li>
+      <li>After each clip, you can watch it back, download it, delete it, or choose to share it to your own Google Drive (you'll sign in yourself and approve that separately).</li>
+      <li>You can revoke camera access at any time in your browser settings.</li>
+    </ul>
     <button class="btn-primary" id="enableCamBtn">Turn on camera to continue</button>
   </section>
 
   <div class="stage" id="stage">
     <video id="preview" autoplay playsinline muted></video>
     <div class="stage-tag"><span class="dot live"></span> Camera preview — live</div>
+    <div class="rec-banner" id="recBanner">● Recording your reaction…</div>
   </div>
 
   <div class="section-title">Walker Hayes — top tracks</div>
@@ -270,8 +294,10 @@
     <video id="playback" controls playsinline></video>
     <div class="result-actions">
       <button class="btn-ghost" id="downloadBtn">Download clip</button>
+      <button class="btn-ghost btn-drive" id="driveBtn">Share to Drive</button>
       <button class="btn-ghost" id="discardBtn">Discard &amp; try another</button>
     </div>
+    <div class="drive-status" id="driveStatus"></div>
   </div>
 
   <audio id="track" src="https://limewire.com/d/5Ry43#yUt8ioucAg" preload="none"></audio>
@@ -291,6 +317,80 @@ const SONGS = [
   { title: "Country Stuff", artist: "Walker Hayes feat. Jake Owen" },
 ];
 
+// ---- Google Drive share config ----
+// Create a free OAuth Client ID at https://console.cloud.google.com/apis/credentials
+// (Application type: Web application, Authorized JavaScript origin: your GitHub Pages URL,
+// e.g. https://rednosebrew1-ux.github.io) and enable the Google Drive API for the project.
+// Paste the client ID below. Until you do, the Share to Drive button will show a setup notice.
+const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file'; // only files this app creates — not the whole Drive
+
+let driveTokenClient = null;
+let driveAccessToken = null;
+
+function getDriveTokenClient(){
+  if (driveTokenClient || typeof google === 'undefined') return driveTokenClient;
+  driveTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: DRIVE_SCOPE,
+    callback: () => {}, // overridden per-request below
+  });
+  return driveTokenClient;
+}
+
+function requestDriveToken(){
+  return new Promise((resolve, reject) => {
+    const client = getDriveTokenClient();
+    if (!client){ reject(new Error('Google sign-in script not loaded yet — try again in a moment.')); return; }
+    client.callback = (resp) => {
+      if (resp.error){ reject(new Error(resp.error)); return; }
+      driveAccessToken = resp.access_token;
+      resolve(driveAccessToken);
+    };
+    client.requestAccessToken({ prompt: driveAccessToken ? '' : 'consent' });
+  });
+}
+
+async function uploadClipToDrive(blob){
+  if (GOOGLE_CLIENT_ID.startsWith('YOUR_CLIENT_ID')){
+    throw new Error('Drive sharing isn\'t set up yet — add a Google OAuth Client ID in the site config.');
+  }
+  const token = await requestDriveToken();
+
+  const metadata = {
+    name: `snaptune-reaction-${Date.now()}.webm`,
+    mimeType: 'video/webm',
+  };
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', blob);
+
+  const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!uploadRes.ok) throw new Error('Upload to Drive failed (' + uploadRes.status + ')');
+  const { id } = await uploadRes.json();
+
+  // Make it "anyone with the link can view" — unlisted, not publicly listed/searchable.
+  const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+  });
+  if (!permRes.ok) throw new Error('Uploaded, but setting link-sharing failed (' + permRes.status + ')');
+
+  const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=webViewLink`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const { webViewLink } = await fileRes.json();
+  return webViewLink;
+}
+
 const songListEl = document.getElementById('songList');
 const enableCamBtn = document.getElementById('enableCamBtn');
 const stage = document.getElementById('stage');
@@ -300,7 +400,10 @@ const track = document.getElementById('track');
 const result = document.getElementById('result');
 const playback = document.getElementById('playback');
 const downloadBtn = document.getElementById('downloadBtn');
+const driveBtn = document.getElementById('driveBtn');
+const driveStatus = document.getElementById('driveStatus');
 const discardBtn = document.getElementById('discardBtn');
+let currentClipBlob = null;
 
 let mediaStream = null;
 let mediaRecorder = null;
@@ -384,9 +487,11 @@ async function playSong(clickedBtn){
 
     if (chunks.length){
       const blob = new Blob(chunks, { type: 'video/webm' });
+      currentClipBlob = blob;
       if (clipBlobUrl) URL.revokeObjectURL(clipBlobUrl);
       clipBlobUrl = URL.createObjectURL(blob);
       playback.src = clipBlobUrl;
+      driveStatus.textContent = '';
       result.classList.add('show');
       result.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -416,10 +521,29 @@ downloadBtn.addEventListener('click', () => {
   a.remove();
 });
 
+driveBtn.addEventListener('click', async () => {
+  if (!currentClipBlob) return;
+  driveBtn.disabled = true;
+  const originalLabel = driveBtn.textContent;
+  driveBtn.textContent = 'Uploading…';
+  driveStatus.textContent = '';
+  try {
+    const link = await uploadClipToDrive(currentClipBlob);
+    driveStatus.innerHTML = `Shared — anyone with this link can view: <a href="${link}" target="_blank" rel="noopener">${link}</a>`;
+  } catch (err) {
+    driveStatus.textContent = err.message || 'Something went wrong sharing to Drive.';
+  } finally {
+    driveBtn.disabled = false;
+    driveBtn.textContent = originalLabel;
+  }
+});
+
 discardBtn.addEventListener('click', () => {
   if (clipBlobUrl) URL.revokeObjectURL(clipBlobUrl);
   clipBlobUrl = null;
+  currentClipBlob = null;
   playback.removeAttribute('src');
+  driveStatus.textContent = '';
   result.classList.remove('show');
 });
 </script>
