@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SnapTune — Hear It, Feel It, Snap It</title>
+<style>
+  :root{
+    --ink:#141018;
+    --paper:#fbf6e9;
+    --volt:#e8ff5b;
+    --hot:#ff4d6d;
+    --grape:#7c5cff;
+    --line: rgba(20,16,24,0.12);
+    --radius: 18px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(circle at 15% 10%, rgba(124,92,255,0.25), transparent 40%),
+      radial-gradient(circle at 85% 90%, rgba(255,77,109,0.2), transparent 45%),
+      var(--ink);
+    color:var(--paper);
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    min-height:100vh;
+  }
+  .display{
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-weight: 700;
+  }
+  .wrap{
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 40px 20px 90px;
+  }
+  header.hero{
+    text-align:center;
+    padding: 30px 0 10px;
+  }
+  .eyebrow{
+    display:inline-block;
+    font-size:12px;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--ink);
+    background:var(--volt);
+    padding:5px 12px;
+    border-radius: 999px;
+    font-weight:700;
+  }
+  h1.display{
+    font-size: clamp(38px, 9vw, 64px);
+    line-height: 1.02;
+    margin: 18px 0 8px;
+    letter-spacing:-0.01em;
+  }
+  h1.display span{ color:var(--volt); }
+  .sub{
+    color: rgba(251,246,233,0.7);
+    font-size:16px;
+    max-width:460px;
+    margin: 0 auto;
+  }
+
+  /* --- Disclaimer --- */
+  .disclaimer{
+    margin: 34px 0;
+    border: 2px solid var(--hot);
+    background: rgba(255,77,109,0.08);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+  }
+  .disclaimer h2{
+    margin:0 0 8px;
+    font-size:15px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    color:var(--hot);
+    display:flex; align-items:center; gap:8px;
+  }
+  .disclaimer p{
+    margin:0 0 16px;
+    font-size:14.5px;
+    line-height:1.55;
+    color: rgba(251,246,233,0.85);
+  }
+  .disclaimer ul{
+    margin:0 0 18px;
+    padding-left: 18px;
+    font-size:14px;
+    color: rgba(251,246,233,0.75);
+    line-height:1.6;
+  }
+  button{
+    font-family:inherit;
+    cursor:pointer;
+    border:none;
+  }
+  .btn-primary{
+    background: var(--volt);
+    color: var(--ink);
+    font-weight:800;
+    font-size:15px;
+    padding: 13px 22px;
+    border-radius: 12px;
+    width:100%;
+  }
+  .btn-primary:disabled{ opacity:.5; cursor:not-allowed; }
+
+  /* --- Camera stage --- */
+  .stage{
+    display:none;
+    margin: 30px 0;
+    border-radius: var(--radius);
+    overflow:hidden;
+    border:1px solid var(--line);
+    background:#000;
+    position:relative;
+  }
+  .stage.on{ display:block; }
+  video#preview{
+    width:100%;
+    display:block;
+    aspect-ratio: 4/3;
+    object-fit:cover;
+    transform: scaleX(-1); /* mirror, like a front camera */
+  }
+  .stage-tag{
+    position:absolute; top:12px; left:12px;
+    background:rgba(20,16,24,0.65);
+    color:var(--paper);
+    font-size:11px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    padding:6px 10px;
+    border-radius:999px;
+    display:flex; align-items:center; gap:6px;
+  }
+  .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--hot);
+  }
+  .dot.live{ animation: pulse 1.2s infinite; }
+  @keyframes pulse{
+    0%{opacity:1;} 50%{opacity:.25;} 100%{opacity:1;}
+  }
+  .rec-banner{
+    position:absolute; bottom:0; left:0; right:0;
+    background: linear-gradient(180deg, transparent, rgba(0,0,0,0.75));
+    color:var(--paper);
+    padding: 22px 14px 12px;
+    font-size:13px;
+    text-align:center;
+    display:none;
+  }
+  .rec-banner.show{ display:block; }
+
+  /* --- Song list --- */
+  .section-title{
+    font-size:12px;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color: rgba(251,246,233,0.55);
+    margin: 34px 0 14px;
+  }
+  .songs{
+    display:grid;
+    grid-template-columns: 1fr;
+    gap:10px;
+  }
+  .song-btn{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    background: rgba(251,246,233,0.05);
+    border:1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 16px;
+    text-align:left;
+    color:var(--paper);
+    transition: transform .12s ease, background .12s ease, border-color .12s ease;
+  }
+  .song-btn:hover:not(:disabled){
+    background: rgba(232,255,91,0.08);
+    border-color: var(--volt);
+    transform: translateX(3px);
+  }
+  .song-btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .song-meta{ display:flex; flex-direction:column; gap:3px; }
+  .song-title{ font-weight:700; font-size:15.5px; }
+  .song-artist{ font-size:12.5px; color:rgba(251,246,233,0.55); }
+  .play-glyph{
+    flex-shrink:0;
+    width:34px; height:34px;
+    border-radius:50%;
+    background:var(--volt);
+    color:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px;
+  }
+
+  /* --- Result panel --- */
+  .result{
+    display:none;
+    margin-top: 30px;
+    border-radius: var(--radius);
+    border:1px solid var(--line);
+    background: rgba(124,92,255,0.08);
+    padding: 20px;
+  }
+  .result.show{ display:block; }
+  .result h3{ margin:0 0 6px; font-size:16px; }
+  .result p{ margin:0 0 14px; font-size:13.5px; color:rgba(251,246,233,0.7); }
+  video#playback{
+    width:100%;
+    border-radius: 12px;
+    margin-bottom: 14px;
+    transform: scaleX(-1);
+  }
+  .result-actions{ display:flex; gap:10px; }
+  .btn-ghost{
+    flex:1;
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--paper);
+    padding:12px;
+    border-radius:12px;
+    font-size:13.5px;
+    font-weight:600;
+  }
+  .btn-ghost:hover{ border-color: var(--volt); }
+
+  audio#track{ display:none; }
+
+  footer{
+    text-align:center;
+    margin-top:50px;
+    font-size:11.5px;
+    color: rgba(251,246,233,0.35);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="eyebrow">audio reaction cam</span>
+    <h1 class="display">Snap<span>Tune</span></h1>
+    <p class="sub">Pick a track. Watch yourself hear it. Keep the clip or toss it — your call.</p>
+  </header>
+
+  <section class="disclaimer">
+    <h2>⚠️ This page uses your camera</h2>
+    <p>
+      SnapTune turns on your device camera and microphone to record a short reaction
+      clip of you while a track plays. You'll always see your own live video feed on
+      screen so you know exactly when it's active.
+    </p>
+    <ul>
+      <li>Nothing is uploaded anywhere — your clip is generated in your browser only.</li>
+      <li>After each clip, you can watch it back, download it, or delete it.</li>
+      <li>You can revoke camera access at any time in your browser settings.</li>
+    </ul>
+    <button class="btn-primary" id="enableCamBtn">Turn on camera to continue</button>
+  </section>
+
+  <div class="stage" id="stage">
+    <video id="preview" autoplay playsinline muted></video>
+    <div class="stage-tag"><span class="dot live"></span> Camera preview — live</div>
+    <div class="rec-banner" id="recBanner">● Recording your reaction…</div>
+  </div>
+
+  <div class="section-title">Walker Hayes — top tracks</div>
+  <div class="songs" id="songList"></div>
+
+  <div class="result" id="result">
+    <h3>Got it — here's your reaction</h3>
+    <p>This clip lives only in your browser right now. Download it if you want to keep it.</p>
+    <video id="playback" controls playsinline></video>
+    <div class="result-actions">
+      <button class="btn-ghost" id="downloadBtn">Download clip</button>
+      <button class="btn-ghost" id="discardBtn">Discard &amp; try another</button>
+    </div>
+  </div>
+
+  <audio id="track" src="https://limewire.com/d/5Ry43#yUt8ioucAg" preload="none"></audio>
+
+  <footer>Camera access is required to play tracks. No data leaves your device.</footer>
+</div>
+
+<script>
+const SONGS = [
+  { title: "Fancy Like", artist: "Walker Hayes" },
+  { title: "AA", artist: "Walker Hayes" },
+  { title: "Y'all Life", artist: "Walker Hayes" },
+  { title: "U Gurl", artist: "Walker Hayes" },
+  { title: "You Broke Up With Me", artist: "Walker Hayes" },
+  { title: "Don't Let Her", artist: "Walker Hayes" },
+  { title: "Craig", artist: "Walker Hayes" },
+  { title: "Country Stuff", artist: "Walker Hayes feat. Jake Owen" },
+];
+
+const songListEl = document.getElementById('songList');
+const enableCamBtn = document.getElementById('enableCamBtn');
+const stage = document.getElementById('stage');
+const preview = document.getElementById('preview');
+const recBanner = document.getElementById('recBanner');
+const track = document.getElementById('track');
+const result = document.getElementById('result');
+const playback = document.getElementById('playback');
+const downloadBtn = document.getElementById('downloadBtn');
+const discardBtn = document.getElementById('discardBtn');
+
+let mediaStream = null;
+let mediaRecorder = null;
+let chunks = [];
+let clipBlobUrl = null;
+let isBusy = false;
+
+function renderSongs(){
+  songListEl.innerHTML = '';
+  SONGS.forEach((song, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'song-btn';
+    btn.disabled = !mediaStream;
+    btn.innerHTML = `
+      <span class="song-meta">
+        <span class="song-title">${song.title}</span>
+        <span class="song-artist">${song.artist}</span>
+      </span>
+      <span class="play-glyph">▶</span>
+    `;
+    btn.addEventListener('click', () => playSong(btn));
+    songListEl.appendChild(btn);
+  });
+}
+renderSongs();
+
+enableCamBtn.addEventListener('click', async () => {
+  enableCamBtn.disabled = true;
+  enableCamBtn.textContent = 'Requesting camera access…';
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    preview.srcObject = mediaStream;
+    stage.classList.add('on');
+    enableCamBtn.textContent = 'Camera on';
+    renderSongs();
+  } catch (err) {
+    enableCamBtn.disabled = false;
+    enableCamBtn.textContent = 'Camera blocked — allow access and retry';
+  }
+});
+
+function setSongButtonsDisabled(disabled){
+  document.querySelectorAll('.song-btn').forEach(b => b.disabled = disabled || !mediaStream);
+}
+
+async function playSong(clickedBtn){
+  if (isBusy || !mediaStream) return;
+  isBusy = true;
+  setSongButtonsDisabled(true);
+  result.classList.remove('show');
+
+  chunks = [];
+  try {
+    mediaRecorder = new MediaRecorder(mediaStream);
+  } catch (e) {
+    mediaRecorder = null;
+  }
+
+  const finishRecording = () => new Promise((resolve) => {
+    if (!mediaRecorder){ resolve(); return; }
+    mediaRecorder.onstop = () => resolve();
+    mediaRecorder.stop();
+  });
+
+  if (mediaRecorder){
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.start();
+    recBanner.classList.add('show');
+  }
+
+  track.currentTime = 0;
+  const stopAfterMs = 12000; // fallback cap in case the track can't load
+  let stopped = false;
+
+  const stopEverything = async () => {
+    if (stopped) return;
+    stopped = true;
+    track.pause();
+    await finishRecording();
+    recBanner.classList.remove('show');
+
+    if (chunks.length){
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      if (clipBlobUrl) URL.revokeObjectURL(clipBlobUrl);
+      clipBlobUrl = URL.createObjectURL(blob);
+      playback.src = clipBlobUrl;
+      result.classList.add('show');
+      result.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    isBusy = false;
+    setSongButtonsDisabled(false);
+  };
+
+  track.onended = stopEverything;
+  track.onerror = () => { setTimeout(stopEverything, 500); };
+
+  try {
+    await track.play();
+  } catch (e) {
+    // Autoplay or source issue — still capture a short reaction clip.
+  }
+
+  setTimeout(stopEverything, stopAfterMs);
+}
+
+downloadBtn.addEventListener('click', () => {
+  if (!clipBlobUrl) return;
+  const a = document.createElement('a');
+  a.href = clipBlobUrl;
+  a.download = `snaptune-reaction-${Date.now()}.webm`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+});
+
+discardBtn.addEventListener('click', () => {
+  if (clipBlobUrl) URL.revokeObjectURL(clipBlobUrl);
+  clipBlobUrl = null;
+  playback.removeAttribute('src');
+  result.classList.remove('show');
+});
+</script>
+</body>
+</html>
